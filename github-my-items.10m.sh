@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # <xbar.title>My GitHub Issues & PRs</xbar.title>
-# <xbar.version>v1.9</xbar.version>
+# <xbar.version>v2.1</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
-# <xbar.desc>Lists your last N GitHub issues & PRs (via gh GraphQL API) with status, review + CI state. GitHub Primer state colors, monochrome menubar, no emoji. N and repo filter are configurable.</xbar.desc>
+# <xbar.desc>Lists your last N GitHub issues & PRs (via gh GraphQL API) with status, review + CI state. Octicons (GitHub's own icon set) via an auto-detected Nerd Font Propo when installed, else SF Symbols + emoji fallback. GitHub Primer state colors, monochrome menubar. N and repo filter are configurable.</xbar.desc>
 # <xbar.dependencies>gh,jq</xbar.dependencies>
 # <xbar.abouturl>https://github.com/championswimmer</xbar.abouturl>
 # <swiftbar.environment>[GH_MY_ITEMS_COUNT=10, GH_MY_ITEMS_REPOS=]</swiftbar.environment>
@@ -21,9 +21,109 @@
 #                        e.g. "railwayapp/*,!railwayapp/mono,championswimmer/tephra".
 #                        Empty/unset = no filter (all repos).
 # Legacy GH_MY_ITEMS_* env vars still work as fallback (e.g. via Plugin Environment).
+#
+# ICONS: dual set - SF Symbols (+ emoji) or Nerd Font Propo glyphs.
+# A proportional ("Propo") Nerd Font is auto-detected via fc-list (mdls
+# fallback); in Mono variants the icons render too small, Propo renders
+# them at full size. With no Nerd Font installed, SF Symbols are used
+# (top-level rows: sfimage only, inner rows may add emoji). To install one:
+#   brew install --cask font-jetbrains-mono-nerd-font
 
 set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# ---------- shared: Nerd Font (Propo) detection ----------
+# IDENTICAL block in github-my-items.10m.sh and railway-deploys.5m.sh -
+# keep the two copies in sync (each plugin must stay single-file for SwiftBar).
+HAVE_NF=0; NF_FONT=""
+detect_nerd_font() {
+  local families fam want
+  families=""
+  if command -v fc-list >/dev/null 2>&1; then
+    families="$(fc-list : family 2>/dev/null | tr ',' '\n' | sed 's/^ *//;s/ *$//' | sort -u | grep -i "Nerd Font Propo" || true)"
+  fi
+  if [ -z "$families" ] && command -v mdls >/dev/null 2>&1; then
+    local d f guess
+    for d in "$HOME/Library/Fonts" /Library/Fonts /System/Library/Fonts; do
+      [ -d "$d" ] || continue
+      for f in "$d"/*Nerd*Propo* "$d"/*NFP*Propo*; do
+        [ -e "$f" ] || continue
+        guess="$(mdls -raw -name kMDItemFonts "$f" 2>/dev/null | tr ',' '\n' | grep -i -m1 " Nerd Font Propo" || true)"
+        guess="$(echo "$guess" | tr -d '"(),[]' | sed 's/^ *//;s/ *$//')"
+        if [ -n "$guess" ]; then families="$guess"; break 2; fi
+      done
+    done
+  fi
+  [ -z "$families" ] && return 0
+  families="$(echo "$families" | sort -u)"
+  for want in JetBrainsMono Hack FiraCode Meslo CaskaydiaCove NotoSans 0xProto Iosevka FiraMono; do
+    fam="$(echo "$families" | grep -i -m1 "$want Nerd Font Propo$" || true)"
+    [ -z "$fam" ] && fam="$(echo "$families" | grep -i -m1 "$want" || true)"
+    if [ -n "$fam" ]; then NF_FONT="$fam"; HAVE_NF=1; return 0; fi
+  done
+  fam="$(echo "$families" | grep -i -m1 " Nerd Font Propo$" || true)"
+  [ -z "$fam" ] && fam="$(echo "$families" | head -1)"
+  NF_FONT="$fam"; HAVE_NF=1
+}
+detect_nerd_font
+
+# ---------- icons: dual set ----------
+# 1. SF Symbols (+ emoji for inner rows; top-level rows use sfimage only)
+# 2. Nerd Font Propo glyphs (Octicons - GitHub's own icon set)
+# Resolved below into T_<NAME> (text prefix) + S_<NAME> (param suffix),
+# so every output line is simply: "${T_FOO}text | ...${S_FOO} ..."
+SF_GH="person.circle";                 NF_GH="$(printf '\xef\x90\x88')"         # U+F408 mark-github
+SF_PR="arrow.triangle.pull";           NF_PR="$(printf '\xef\x90\x87')"         # U+F407 git-pull-request
+SF_ISSUE="dot.circle";                 NF_ISSUE="$(printf '\xef\x90\x9b')"      # U+F41B issue-opened
+SF_MERGED="arrow.triangle.merge";      NF_MERGED="$(printf '\xef\x90\x99')"     # U+F419 git-merge
+SF_CLOSED_PR="xmark.circle";           NF_CLOSED_PR="$(printf '\xef\x93\x9c')"  # U+F4DC pull-request-closed
+SF_DRAFT="pencil.line";                NF_DRAFT="$(printf '\xef\x93\x9d')"      # U+F4DD pull-request-draft
+SF_APPROVED="checkmark.circle";        NF_APPROVED="$(printf '\xef\x90\xae')"  # U+F42E check
+SF_CHANGES="arrow.uturn.backward.circle"; NF_CHANGES="$(printf '\xef\x93\x92')" # U+F4D2 file-diff
+SF_REVIEW="eye.circle";                NF_REVIEW="$(printf '\xef\x91\x81')"     # U+F441 eye
+SF_ISSUE_DONE="checkmark.circle";      NF_ISSUE_DONE="$(printf '\xef\x90\x9d')" # U+F41D issue-closed
+SF_ISSUE_SKIP="minus.circle";          NF_ISSUE_SKIP="$(printf '\xef\x91\xa8')" # U+F468 dash
+SF_ERR="exclamationmark.triangle";     NF_ERR="$(printf '\xef\x90\xa1')"       # U+F421 alert
+SF_AUTH="person.badge.key";            NF_AUTH="$(printf '\xef\x90\x95')"       # U+F415 person
+SF_REFRESH="arrow.clockwise";          NF_REFRESH="$(printf '\xef\x91\xaa')"    # U+F46A sync
+SF_SEC_ISSUES="ticket"
+EMOJI_COMMENT="💬";                     NF_COMMENT="$(printf '\xef\x90\x9f')"     # U+F41F comment
+
+if [ "$HAVE_NF" -eq 1 ]; then
+  T_GH="$NF_GH ";                 S_GH=" font=\"$NF_FONT\""
+  T_PR="$NF_PR ";                 S_PR=" font=\"$NF_FONT\""
+  T_ISSUE="$NF_ISSUE ";           S_ISSUE=" font=\"$NF_FONT\""
+  T_SEC_ISSUES="$NF_ISSUE ";      S_SEC_ISSUES=" font=\"$NF_FONT\""
+  T_MERGED="$NF_MERGED ";         S_MERGED=" font=\"$NF_FONT\""
+  T_CLOSED_PR="$NF_CLOSED_PR ";   S_CLOSED_PR=" font=\"$NF_FONT\""
+  T_DRAFT="$NF_DRAFT ";           S_DRAFT=" font=\"$NF_FONT\""
+  T_APPROVED="$NF_APPROVED ";     S_APPROVED=" font=\"$NF_FONT\""
+  T_CHANGES="$NF_CHANGES ";       S_CHANGES=" font=\"$NF_FONT\""
+  T_REVIEW="$NF_REVIEW ";         S_REVIEW=" font=\"$NF_FONT\""
+  T_ISSUE_DONE="$NF_ISSUE_DONE "; S_ISSUE_DONE=" font=\"$NF_FONT\""
+  T_ISSUE_SKIP="$NF_ISSUE_SKIP "; S_ISSUE_SKIP=" font=\"$NF_FONT\""
+  T_ERR="$NF_ERR ";               S_ERR=" font=\"$NF_FONT\""
+  T_AUTH="$NF_AUTH ";             S_AUTH=" font=\"$NF_FONT\""
+  T_REFRESH="$NF_REFRESH ";       S_REFRESH=" font=\"$NF_FONT\""
+  CMT="$NF_COMMENT "
+else
+  T_GH="";                 S_GH=" sfimage=$SF_GH"
+  T_PR="";                 S_PR=" sfimage=$SF_PR"
+  T_ISSUE="";              S_ISSUE=" sfimage=$SF_ISSUE"
+  T_SEC_ISSUES="";         S_SEC_ISSUES=" sfimage=$SF_SEC_ISSUES"
+  T_MERGED="";             S_MERGED=" sfimage=$SF_MERGED"
+  T_CLOSED_PR="";          S_CLOSED_PR=" sfimage=$SF_CLOSED_PR"
+  T_DRAFT="";              S_DRAFT=" sfimage=$SF_DRAFT"
+  T_APPROVED="";           S_APPROVED=" sfimage=$SF_APPROVED"
+  T_CHANGES="";            S_CHANGES=" sfimage=$SF_CHANGES"
+  T_REVIEW="";             S_REVIEW=" sfimage=$SF_REVIEW"
+  T_ISSUE_DONE="";         S_ISSUE_DONE=" sfimage=$SF_ISSUE_DONE"
+  T_ISSUE_SKIP="";         S_ISSUE_SKIP=" sfimage=$SF_ISSUE_SKIP"
+  T_ERR="";                S_ERR=" sfimage=$SF_ERR"
+  T_AUTH="";               S_AUTH=" sfimage=$SF_AUTH"
+  T_REFRESH="";            S_REFRESH=" sfimage=$SF_REFRESH"
+  CMT="$EMOJI_COMMENT"
+fi
 
 # ---------- config ----------
 N="${VAR_GH_ITEMS_COUNT:-${GH_MY_ITEMS_COUNT:-10}}"
@@ -80,21 +180,21 @@ ISSUE_Q="author:@me is:issue sort:updated-desc${REPO_Q}"
 
 # ---------- preconditions ----------
 if ! command -v gh >/dev/null 2>&1; then
-  echo "no gh | sfimage=exclamationmark.triangle"
+  echo "${T_ERR}no gh |${S_ERR}"
   echo "---"
   echo "gh CLI not found"
   echo "Install it: brew install gh | href=https://cli.github.com/"
   exit 0
 fi
 if ! command -v jq >/dev/null 2>&1; then
-  echo "no jq | sfimage=exclamationmark.triangle"
+  echo "${T_ERR}no jq |${S_ERR}"
   echo "---"
   echo "jq not found"
   echo "Install it: brew install jq | href=https://jqlang.github.io/jq/"
   exit 0
 fi
 if ! gh auth status >/dev/null 2>&1; then
-  echo "gh login | sfimage=person.badge.key"
+  echo "${T_AUTH}gh login |${S_AUTH}"
   echo "---"
   echo "gh is not authenticated"
   echo "Run 'gh auth login' in a terminal, then refresh"
@@ -126,7 +226,7 @@ query($prQ: String!, $issueQ: String!, $n: Int!) {
     }
   }
 }' 2>&1)" || {
-  echo "gh error | sfimage=exclamationmark.triangle"
+  echo "${T_ERR}gh error |${S_ERR}"
   echo "---"
   echo "GraphQL query failed"
   echo "--$(echo "$DATA" | head -3 | tr '\n' ' ' | cut -c1-120)"
@@ -134,14 +234,15 @@ query($prQ: String!, $issueQ: String!, $n: Int!) {
 }
 
 if echo "$DATA" | jq -e '.errors' >/dev/null 2>&1; then
-  echo "gh error | sfimage=exclamationmark.triangle"
+  echo "${T_ERR}gh error |${S_ERR}"
   echo "---"
   echo "$(echo "$DATA" | jq -r '.errors[0].message' | cut -c1-100)"
   exit 0
 fi
 
 # ---------- format helpers (jq) ----------
-# Dropdown rows: GitHub Primer state colors for text + SF Symbol icon.
+# Dropdown rows: Octicons glyphs (Nerd Font) + GitHub Primer state colors.
+# The glyph is part of the text, so color= tints the icon too.
 # open=green, merged/completed=purple, closed-red=red, draft/not-planned=gray.
 # (Menubar header stays monochrome.)
 PR_FMT='
@@ -149,13 +250,13 @@ PR_FMT='
   (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:60]) as $t |
   (.repository.nameWithOwner) as $r |
   (.commits.nodes[0].commit.statusCheckRollup.state // "") as $ci |
-  (if .state == "MERGED" then "arrow.triangle.merge"
-   elif .state == "CLOSED" then "xmark.circle"
-   elif .isDraft then "pencil.line"
-   elif .reviewDecision == "APPROVED" then "checkmark.circle"
-   elif .reviewDecision == "CHANGES_REQUESTED" then "arrow.uturn.backward.circle"
-   elif .reviewDecision == "REVIEW_REQUIRED" then "eye.circle"
-   else "arrow.triangle.pull" end) as $sym |
+  (if .state == "MERGED" then {n:"\uf419", s:"arrow.triangle.merge"}
+   elif .state == "CLOSED" then {n:"\uf4dc", s:"xmark.circle"}
+   elif .isDraft then {n:"\uf4dd", s:"pencil.line"}
+   elif .reviewDecision == "APPROVED" then {n:"\uf42e", s:"checkmark.circle"}
+   elif .reviewDecision == "CHANGES_REQUESTED" then {n:"\uf4d2", s:"arrow.uturn.backward.circle"}
+   elif .reviewDecision == "REVIEW_REQUIRED" then {n:"\uf441", s:"eye.circle"}
+   else {n:"\uf407", s:"arrow.triangle.pull"} end) as $ic |
   (if .state == "MERGED" then "#8250df,#d2a8ff"
    elif .state == "CLOSED" then "#cf222e,#f85149"
    elif .isDraft then "#6e7781,#8b949e"
@@ -171,45 +272,55 @@ PR_FMT='
    elif .state == "MERGED" then " · merged"
    elif .state == "CLOSED" then " · closed"
    else "" end) as $revs |
-  "--#\(.number) \($t) (\($r)) · 💬\(.comments.totalCount)\($cis)\($revs) | href=\(.url) sfimage=\($sym) color=\($color) sfcolor=\($color) size=12"
+  (if $use_nf == 1 then $ic.n + " " else "" end) as $p |
+  (if $use_nf == 1 then " font=\"\($nf)\"" else (" sfimage=" + $ic.s) end) as $q |
+  (if $use_nf == 1 then "" else (" sfcolor=" + $color) end) as $sc |
+  "--\($p)#\(.number) \($t) (\($r)) · \($cmt)\(.comments.totalCount)\($cis)\($revs) | href=\(.url) color=\($color)\($sc) size=12\($q)"
 '
 ISSUE_FMT='
   .data.issues.nodes[] |
   (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:60]) as $t |
   (.repository.nameWithOwner) as $r |
   ([.labels.nodes[].name] | join(",") | .[0:40]) as $labs |
-  (if .state == "OPEN" then "dot.circle"
-   elif .stateReason == "COMPLETED" then "checkmark.circle"
-   else "minus.circle" end) as $sym |
+  (if .state == "OPEN" then {n:"\uf41b", s:"dot.circle"}
+   elif .stateReason == "COMPLETED" then {n:"\uf41d", s:"checkmark.circle"}
+   else {n:"\uf468", s:"minus.circle"} end) as $ic |
   (if .state == "OPEN" then "#1a7f37,#3fb950"
    elif .stateReason == "COMPLETED" then "#8250df,#d2a8ff"
    else "#6e7781,#8b949e" end) as $color |
   (if ($labs | length) > 0 then " [\($labs)]" else "" end) as $lsuf |
-  "--#\(.number) \($t)\($lsuf) (\($r)) · 💬\(.comments.totalCount) | href=\(.url) sfimage=\($sym) color=\($color) sfcolor=\($color) size=12"
+  (if $use_nf == 1 then $ic.n + " " else "" end) as $p |
+  (if $use_nf == 1 then " font=\"\($nf)\"" else (" sfimage=" + $ic.s) end) as $q |
+  (if $use_nf == 1 then "" else (" sfcolor=" + $color) end) as $sc |
+  "--\($p)#\(.number) \($t)\($lsuf) (\($r)) · \($cmt)\(.comments.totalCount) | href=\(.url) color=\($color)\($sc) size=12\($q)"
 '
 
-PR_LINES="$(echo "$DATA" | jq -r "$PR_FMT" 2>/dev/null)"
-ISSUE_LINES="$(echo "$DATA" | jq -r "$ISSUE_FMT" 2>/dev/null)"
+PR_LINES="$(echo "$DATA" | jq -r --argjson use_nf "$HAVE_NF" --arg nf "$NF_FONT" --arg cmt "$CMT" "$PR_FMT" 2>/dev/null)"
+ISSUE_LINES="$(echo "$DATA" | jq -r --argjson use_nf "$HAVE_NF" --arg nf "$NF_FONT" --arg cmt "$CMT" "$ISSUE_FMT" 2>/dev/null)"
 
 PR_OPEN="$(echo "$DATA" | jq '[.data.prs.nodes[] | select(.state=="OPEN")] | length' 2>/dev/null)"
 ISSUE_OPEN="$(echo "$DATA" | jq '[.data.issues.nodes[] | select(.state=="OPEN")] | length' 2>/dev/null)"
 PR_OPEN="${PR_OPEN:-?}"; ISSUE_OPEN="${ISSUE_OPEN:-?}"
 
 # ---------- output ----------
-# header (menu bar): single compact line with monochrome inline SF Symbols -
-# no emoji, symbols adopt menu-bar text color. dropdown=false keeps the
-# counts out of the dropdown itself (dropdown starts at "My Pull Requests").
-echo ":arrow.triangle.pull: ${PR_OPEN}  :dot.circle: ${ISSUE_OPEN} | symbolize=true emojize=false dropdown=false"
+# header (menu bar): monochrome. Nerd Font mode uses Octicons text glyphs;
+# SF mode uses inline :symbol: names (symbolize=true). dropdown=false keeps
+# the counts out of the dropdown itself (dropdown starts at "My Pull Requests").
+if [ "$HAVE_NF" -eq 1 ]; then
+  echo "${NF_PR} ${PR_OPEN}  ${NF_ISSUE} ${ISSUE_OPEN} | font=\"${NF_FONT}\" emojize=false dropdown=false"
+else
+  echo ":arrow.triangle.pull: ${PR_OPEN}  :dot.circle: ${ISSUE_OPEN} | symbolize=true emojize=false dropdown=false"
+fi
 echo "---"
 
-echo "My Pull Requests (last ${N}) | sfimage=arrow.triangle.pull"
+echo "${T_PR}My Pull Requests (last ${N}) |${S_PR}"
 if [ -n "$PR_LINES" ]; then
   echo "$PR_LINES"
 else
   echo "--(none found)"
 fi
 echo "---"
-echo "My Issues (last ${N}) | sfimage=ticket"
+echo "${T_SEC_ISSUES}My Issues (last ${N}) |${S_SEC_ISSUES}"
 if [ -n "$ISSUE_LINES" ]; then
   echo "$ISSUE_LINES"
 else
@@ -217,6 +328,10 @@ else
 fi
 echo "---"
 echo "N=${N} · filter: ${FILTER_LABEL} | size=11 symbolize=false"
-echo "Legend: pencil=draft eye=needs-review uturn=changes check=approved merge=merged | size=11 symbolize=false"
-echo "Refresh | refresh=true sfimage=arrow.clockwise size=11"
-echo "Open my GitHub profile | href=https://github.com/ sfimage=person.circle size=11"
+if [ "$HAVE_NF" -eq 1 ]; then
+  echo "Legend: ${NF_DRAFT} draft · ${NF_REVIEW} needs-review · ${NF_CHANGES} changes · ${NF_APPROVED} approved · ${NF_MERGED} merged | size=11 font=\"${NF_FONT}\""
+else
+  echo "Legend: pencil=draft eye=needs-review uturn=changes check=approved merge=merged | size=11 symbolize=false"
+fi
+echo "${T_REFRESH}Refresh | refresh=true size=11${S_REFRESH}"
+echo "${T_GH}Open my GitHub profile | href=https://github.com/ size=11${S_GH}"
