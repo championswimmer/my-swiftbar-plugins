@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# <xbar.title>My GitHub Issues & PRs</xbar.title>
+# <xbar.title>Github</xbar.title>
 # <xbar.version>v2.1</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
@@ -9,6 +9,7 @@
 # <swiftbar.environment>[GH_MY_ITEMS_COUNT=10, GH_MY_ITEMS_REPOS=]</swiftbar.environment>
 # <xbar.var>number(VAR_GH_ITEMS_COUNT="10"): How many issues and PRs to list each (1-50).</xbar.var>
 # <xbar.var>string(VAR_GH_ITEMS_REPOS=""): Repos to include/exclude, comma-separated: org/repo for one repo, org/* for a whole org, ! prefix to exclude. Empty = all repos. E.g. railwayapp/*,!railwayapp/mono.</xbar.var>
+# <xbar.var>select(VAR_GH_MENUBAR_STYLE="split"): Menubar icon style: split shows PR + issue counts, github shows just the GitHub icon. [split, github]</xbar.var>
 #
 # CONFIG via SwiftBar Preferences > Plugins > this plugin > Variables (SwiftBar 2.1+):
 #   VAR_GH_ITEMS_COUNT - how many issues and PRs to list each (default 10, clamped 1-50)
@@ -20,6 +21,9 @@
 #                        ("-" also works as the exclude prefix, e.g. "-railwayapp/mono")
 #                        e.g. "railwayapp/*,!railwayapp/mono,championswimmer/tephra".
 #                        Empty/unset = no filter (all repos).
+#   VAR_GH_MENUBAR_STYLE - menubar icon style (default split):
+#                          split  - PR icon + open PR count, issue icon + open issue count
+#                          github - just the GitHub mark icon, no counts
 # Legacy GH_MY_ITEMS_* env vars still work as fallback (e.g. via Plugin Environment).
 #
 # ICONS: dual set - SF Symbols (+ emoji) or Nerd Font Propo glyphs.
@@ -33,7 +37,7 @@ set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # ---------- shared: Nerd Font (Propo) detection ----------
-# IDENTICAL block in github-my-items.10m.sh and railway-deploys.5m.sh -
+# IDENTICAL block in github.10m.sh and railway.5m.sh -
 # keep the two copies in sync (each plugin must stay single-file for SwiftBar).
 HAVE_NF=0; NF_FONT=""
 detect_nerd_font() {
@@ -128,6 +132,7 @@ fi
 # ---------- config ----------
 N="${VAR_GH_ITEMS_COUNT:-${GH_MY_ITEMS_COUNT:-10}}"
 REPOS_CSV="${VAR_GH_ITEMS_REPOS:-${GH_MY_ITEMS_REPOS:-}}"
+MENUBAR_STYLE="${VAR_GH_MENUBAR_STYLE:-${GH_MENUBAR_STYLE:-split}}"
 
 # validate N (default 10, clamp 1..50)
 if ! [[ "$N" =~ ^[0-9]+$ ]] || [ "$N" -lt 1 ]; then N=10; fi
@@ -305,9 +310,16 @@ PR_OPEN="${PR_OPEN:-?}"; ISSUE_OPEN="${ISSUE_OPEN:-?}"
 # ---------- output ----------
 # header (menu bar): monochrome. Nerd Font mode uses Octicons text glyphs;
 # SF mode uses inline :symbol: names (symbolize=true). dropdown=false keeps
-# the counts out of the dropdown itself (dropdown starts at "My Pull Requests").
-if [ "$HAVE_NF" -eq 1 ]; then
-  echo "${NF_PR} ${PR_OPEN}  ${NF_ISSUE} ${ISSUE_OPEN} | font=\"${NF_FONT}\" emojize=false dropdown=false"
+# the header out of the dropdown itself (dropdown starts at "My Pull Requests").
+# MENUBAR_STYLE=github shows just the GitHub mark; anything else = split PR/issue counts.
+if [ "$MENUBAR_STYLE" = "github" ]; then
+  if [ "$HAVE_NF" -eq 1 ]; then
+    echo "${NF_GH} | font=\"${NF_FONT}\" size=14 emojize=false dropdown=false"
+  else
+    echo ":${SF_GH}: | symbolize=true emojize=false dropdown=false"
+  fi
+elif [ "$HAVE_NF" -eq 1 ]; then
+  echo "${NF_PR} ${PR_OPEN}  ${NF_ISSUE} ${ISSUE_OPEN} | font=\"${NF_FONT}\" size=14 emojize=false dropdown=false"
 else
   echo ":arrow.triangle.pull: ${PR_OPEN}  :dot.circle: ${ISSUE_OPEN} | symbolize=true emojize=false dropdown=false"
 fi
@@ -329,9 +341,19 @@ fi
 echo "---"
 echo "N=${N} · filter: ${FILTER_LABEL} | size=11 symbolize=false"
 if [ "$HAVE_NF" -eq 1 ]; then
-  echo "Legend: ${NF_DRAFT} draft · ${NF_REVIEW} needs-review · ${NF_CHANGES} changes · ${NF_APPROVED} approved · ${NF_MERGED} merged | size=11 font=\"${NF_FONT}\""
+  echo "Legend | size=11 font=\"${NF_FONT}\""
+  echo "--${NF_DRAFT} draft | size=11 font=\"${NF_FONT}\""
+  echo "--${NF_REVIEW} needs-review | size=11 font=\"${NF_FONT}\""
+  echo "--${NF_CHANGES} changes-requested | size=11 font=\"${NF_FONT}\""
+  echo "--${NF_APPROVED} approved | size=11 font=\"${NF_FONT}\""
+  echo "--${NF_MERGED} merged | size=11 font=\"${NF_FONT}\""
 else
-  echo "Legend: pencil=draft eye=needs-review uturn=changes check=approved merge=merged | size=11 symbolize=false"
+  echo "Legend | size=11 symbolize=false"
+  echo "--:${SF_DRAFT}: draft | size=11 symbolize=true"
+  echo "--:${SF_REVIEW}: needs-review | size=11 symbolize=true"
+  echo "--:${SF_CHANGES}: changes-requested | size=11 symbolize=true"
+  echo "--:${SF_APPROVED}: approved | size=11 symbolize=true"
+  echo "--:${SF_MERGED}: merged | size=11 symbolize=true"
 fi
 echo "${T_REFRESH}Refresh | refresh=true size=11${S_REFRESH}"
 echo "${T_GH}Open my GitHub profile | href=https://github.com/ size=11${S_GH}"

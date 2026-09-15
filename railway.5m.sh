@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# <xbar.title>Railway Deploys</xbar.title>
+# <xbar.title>Railway</xbar.title>
 # <xbar.version>v2.1</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
@@ -39,7 +39,7 @@ set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # ---------- shared: Nerd Font (Propo) detection ----------
-# IDENTICAL block in github-my-items.10m.sh and railway-deploys.5m.sh -
+# IDENTICAL block in github.10m.sh and railway.5m.sh -
 # keep the two copies in sync (each plugin must stay single-file for SwiftBar).
 HAVE_NF=0; NF_FONT=""
 detect_nerd_font() {
@@ -188,7 +188,7 @@ esac
 PLUGIN_FILE="$(basename "$PLUGIN_PATH")"
 # Sidecar path MUST match SwiftBar's convention (PluginVariableStorage):
 # strip the last extension, then append .vars.json
-# e.g. railway-deploys.5m.sh -> railway-deploys.5m.vars.json
+# e.g. railway.5m.sh -> railway.5m.vars.json
 VARS_FILE="${PLUGIN_PATH%.*}.vars.json"
 N="${VAR_RAILWAY_DEPLOY_COUNT:-${RAILWAY_DEPLOY_COUNT:-10}}"
 
@@ -471,13 +471,13 @@ BUSYC=$((TOT - OKC - BADC - NEVERC))
 # (symbolize=true). dropdown=false keeps the header out of the dropdown itself.
 if [ "$BADC" -gt 0 ]; then
   if [ "$HAVE_NF" -eq 1 ]; then
-    HEAD="${NF_RAILWAY} ${NF_ERR} ${BADC}"; HEAD_P=" font=\"${NF_FONT}\" emojize=false dropdown=false"
+    HEAD="${NF_RAILWAY} ${NF_ERR} ${BADC}"; HEAD_P=" font=\"${NF_FONT}\" size=16 emojize=false dropdown=false"
   else
     HEAD=":${SF_RAILWAY}: :${SF_ERR}: ${BADC}"; HEAD_P=" symbolize=true emojize=false dropdown=false"
   fi
 else
   if [ "$HAVE_NF" -eq 1 ]; then
-    HEAD="${NF_RAILWAY}"; HEAD_P=" font=\"${NF_FONT}\" emojize=false dropdown=false"
+    HEAD="${NF_RAILWAY}"; HEAD_P=" font=\"${NF_FONT}\" size=16 emojize=false dropdown=false"
   else
     HEAD=":${SF_RAILWAY}:"; HEAD_P=" symbolize=true emojize=false dropdown=false"
   fi
@@ -498,10 +498,36 @@ echo "$ME_JSON" | jq -r --arg pin "$PIN" --arg plug "$PLUGIN_PATH" --arg org_p "
 echo "---"
 cat "$TMPBODY"
 echo "---"
-if [ -n "$PIN" ]; then
-  echo "workspace: ${PINNED_WS_NAME} · ${PROJC} projects · N=${N} deploys/svc | size=11 symbolize=false"
+# Footer stats: keep top-level lines short; counts live in submenus.
+# sfcolor only applies in SF mode (NF mode uses font= + color= like the jq rows).
+if [ "$HAVE_NF" -eq 1 ]; then
+  SC_OK=""; SC_BAD=""; SC_BUSY=""; SC_GRAY=""; SC_PURPLE=""
 else
-  echo "${PROJC} projects · N=${N} deploys/svc | size=11 symbolize=false"
+  SC_OK=" sfcolor=#1a7f37,#3fb950"; SC_BAD=" sfcolor=#cf222e,#f85149"
+  SC_BUSY=" sfcolor=#9a6700,#d29922"; SC_GRAY=" sfcolor=#6e7781,#8b949e"
+  SC_PURPLE=" sfcolor=#8250df,#d2a8ff"
 fi
+if [ -n "$PIN" ]; then
+  WS_LABEL="$(echo "$PINNED_WS_NAME" | tr '\n' ' ' | tr '|' '-')"
+  echo "Workspace: ${WS_LABEL} | size=11 symbolize=false"
+else
+  echo "All workspaces | size=11 symbolize=false"
+fi
+echo "--Projects: ${PROJC} | size=11 symbolize=false"
+echo "--Services: ${TOT} | size=11 symbolize=false"
+echo "----${T_SUCCESS}Healthy: ${OKC} | size=11${S_SUCCESS} color=#1a7f37,#3fb950${SC_OK}"
+echo "----${T_FAILED}Failing: ${BADC} | size=11${S_FAILED} color=#cf222e,#f85149${SC_BAD}"
+echo "----${T_BUILDING}Busy/other: ${BUSYC} | size=11${S_BUILDING} color=#9a6700,#d29922${SC_BUSY}"
+echo "----${T_NEVER}Never deployed: ${NEVERC} | size=11${S_NEVER} color=#6e7781,#8b949e${SC_GRAY}"
+echo "--Deploys: last ${N} per service | size=11 symbolize=false"
+echo "Legend | size=11 symbolize=false"
+echo "--${T_SUCCESS}SUCCESS · healthy | size=11${S_SUCCESS} color=#1a7f37,#3fb950${SC_OK}"
+echo "--${T_FAILED}FAILED / CRASHED · failing | size=11${S_FAILED} color=#cf222e,#f85149${SC_BAD}"
+echo "--${T_BUILDING}BUILDING / DEPLOYING | size=11${S_BUILDING} color=#9a6700,#d29922${SC_BUSY}"
+echo "--${T_QUEUED}QUEUED / WAITING | size=11${S_QUEUED} color=#9a6700,#d29922${SC_BUSY}"
+echo "--${T_SLEEPING}SLEEPING | size=11${S_SLEEPING} color=#6e7781,#8b949e${SC_GRAY}"
+echo "--${T_REMOVED}REMOVED / SKIPPED | size=11${S_REMOVED} color=#6e7781,#8b949e${SC_GRAY}"
+echo "--${T_UNKNOWN}other states | size=11${S_UNKNOWN} color=#8250df,#d2a8ff${SC_PURPLE}"
+echo "--${T_NEVER}never deployed | size=11${S_NEVER} color=#6e7781,#8b949e${SC_GRAY}"
 echo "${T_REFRESH}Refresh | refresh=true size=11${S_REFRESH}"
 echo "${T_RAILWAY}Open Railway dashboard | href=https://railway.com/dashboard size=11${S_RAILWAY}"
