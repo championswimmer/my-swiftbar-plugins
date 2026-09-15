@@ -252,7 +252,7 @@ fi
 # (Menubar header stays monochrome.)
 PR_FMT='
   .data.prs.nodes[] |
-  (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:60]) as $t |
+  (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:70]) as $t |
   (.repository.nameWithOwner) as $r |
   (.commits.nodes[0].commit.statusCheckRollup.state // "") as $ci |
   (if .state == "MERGED" then {n:"\uf419", s:"arrow.triangle.merge"}
@@ -279,12 +279,13 @@ PR_FMT='
    else "" end) as $revs |
   (if $use_nf == 1 then $ic.n + " " else "" end) as $p |
   (if $use_nf == 1 then " font=\"\($nf)\"" else (" sfimage=" + $ic.s) end) as $q |
+  (if $use_nf == 1 then " font=\"\($nf)\"" else "" end) as $q2 |
   (if $use_nf == 1 then "" else (" sfcolor=" + $color) end) as $sc |
-  "--\($p)#\(.number) \($t) (\($r)) · \($cmt)\(.comments.totalCount)\($cis)\($revs) | href=\(.url) color=\($color)\($sc) size=12\($q)"
+  "--\($p)#\(.number) \($t) | href=\(.url) color=\($color)\($sc) size=12\($q)\n--  \($r) · \($cmt)\(.comments.totalCount)\($cis)\($revs) | size=11 trim=false\($q2)"
 '
 ISSUE_FMT='
   .data.issues.nodes[] |
-  (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:60]) as $t |
+  (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:70]) as $t |
   (.repository.nameWithOwner) as $r |
   ([.labels.nodes[].name] | join(",") | .[0:40]) as $labs |
   (if .state == "OPEN" then {n:"\uf41b", s:"dot.circle"}
@@ -293,11 +294,16 @@ ISSUE_FMT='
   (if .state == "OPEN" then "#1a7f37,#3fb950"
    elif .stateReason == "COMPLETED" then "#8250df,#d2a8ff"
    else "#6e7781,#8b949e" end) as $color |
-  (if ($labs | length) > 0 then " [\($labs)]" else "" end) as $lsuf |
+  (if ($labs | length) > 0 then " · \($labs)" else "" end) as $lsuf |
+  (if .state == "OPEN" then ""
+   elif .stateReason == "COMPLETED" then " · completed"
+   elif .state == "CLOSED" then " · not-planned"
+   else "" end) as $st |
   (if $use_nf == 1 then $ic.n + " " else "" end) as $p |
   (if $use_nf == 1 then " font=\"\($nf)\"" else (" sfimage=" + $ic.s) end) as $q |
+  (if $use_nf == 1 then " font=\"\($nf)\"" else "" end) as $q2 |
   (if $use_nf == 1 then "" else (" sfcolor=" + $color) end) as $sc |
-  "--\($p)#\(.number) \($t)\($lsuf) (\($r)) · \($cmt)\(.comments.totalCount) | href=\(.url) color=\($color)\($sc) size=12\($q)"
+  "--\($p)#\(.number) \($t) | href=\(.url) color=\($color)\($sc) size=12\($q)\n--  \($r) · \($cmt)\(.comments.totalCount)\($lsuf)\($st) | size=11 trim=false\($q2)"
 '
 
 PR_LINES="$(echo "$DATA" | jq -r --argjson use_nf "$HAVE_NF" --arg nf "$NF_FONT" --arg cmt "$CMT" "$PR_FMT" 2>/dev/null)"

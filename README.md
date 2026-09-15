@@ -2,7 +2,12 @@
 
 Small menu bar plugins I actually use every day. Drop one into your plugin folder and it just shows up in the menu bar — no build step, no config files to hand-edit.
 
-![Railway plugin menu](screenshots/railway-plugin.png)
+<table>
+  <tr>
+    <td><img src="screenshots/github-plugin.png" alt="GitHub plugin menu" /></td>
+    <td><img src="screenshots/railway-plugin.png" alt="Railway plugin menu" /></td>
+  </tr>
+</table>
 
 ## Compatible apps
 
