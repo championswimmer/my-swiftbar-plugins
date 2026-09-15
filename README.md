@@ -35,11 +35,15 @@ The refresh interval comes from the filename (`*.5m.sh` = every 5 minutes). Rena
    ```
 4. Hit Refresh in the menu bar. Done.
 
-Optional but recommended: install a proportional Nerd Font so the icons render at full size (otherwise you get SF Symbols + emoji fallback, which still looks fine):
+### Icons — install a Nerd Font for the best look
+
+Both plugins auto-detect a Nerd Font and use its icons (Octicons for GitHub states, Railway + Devicons glyphs for Railway) — that's what you see in the screenshot above. Without one they fall back to SF Symbols + emoji, which works but looks plainer. So for the best icons, install a Nerd Font first — just make sure it's a proportional (**Propo**) variant, the Mono ones render too small in the menu bar:
 
 ```sh
 brew install --cask font-jetbrains-mono-nerd-font
 ```
+
+Any other [Nerd Font](https://www.nerdfonts.com) with a Propo variant works too — the plugins pick it up automatically on the next refresh.
 
 ## Settings
 
