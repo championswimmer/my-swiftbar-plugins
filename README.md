@@ -33,7 +33,7 @@ The refresh interval comes from the filename (`*.5m.sh` = every 5 minutes). Rena
 1. Install one of the apps above. For SwiftBar: download from [releases](https://github.com/swiftbar/SwiftBar/releases) or `brew install --cask swiftbar`.
 2. Install the CLIs each plugin shells out to:
    - GitHub plugin: `brew install gh jq`, then `gh auth login`
-   - Railway plugin: `brew install jq` plus the [Railway CLI](https://docs.railway.com/guides/cli), then `railway login`
+   - Railway plugin: `brew install railway jq`, then `railway login`
 3. Copy the `.sh` file(s) into your plugin folder (SwiftBar asks for this on first launch) and make them executable:
    ```sh
    chmod +x github.10m.sh railway.5m.sh
