@@ -23,8 +23,8 @@ If a plugin header says `<xbar.*>` and `<swiftbar.*>`, that's why — same scrip
 
 | Plugin | What it does | Refreshes every |
 | --- | --- | --- |
-| `github.10m.sh` | Your open GitHub issues & PRs, with review and CI state | 10 min |
-| `railway.5m.sh` | Railway workspace → project → environment → service tree, with status and recent deploys (click a deploy to open its logs) | 5 min |
+| `github.10m.sh` | Assigned/created issues & authored/assigned PRs, with review and CI state | 10 min |
+| `railway.5m.sh` | Railway workspace → project → environment → service tree, with status and recent deploys (click a deploy to open its logs, copy database URL on DB services) | 5 min |
 
 The refresh interval comes from the filename (`*.5m.sh` = every 5 minutes). Rename the file if you want a different cadence, e.g. `github.30m.sh`.
 
@@ -56,7 +56,7 @@ No need to edit the scripts. In SwiftBar go to Preferences → Plugins → pick 
 
 **GitHub (`github.10m.sh`)**
 
-- `VAR_GH_ITEMS_COUNT` — how many issues and PRs to list each (default `10`, clamped 1–50).
+- `VAR_GH_ITEMS_COUNT` — how many items to list in each of the 4 lists (default `10`, clamped 1–50).
 - `VAR_GH_ITEMS_REPOS` — repo filter, comma-separated. `org/repo` for one repo, `org/*` for a whole org, `!` prefix to exclude. Empty = everything. Example: `railwayapp/*,!railwayapp/mono`.
 - `VAR_GH_MENUBAR_STYLE` — `split` shows PR + issue counts in the menu bar, `github` shows just the GitHub mark.
 

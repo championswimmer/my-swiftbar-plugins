@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # <xbar.title>Github</xbar.title>
-# <xbar.version>v2.1</xbar.version>
+# <xbar.version>v2.2</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
-# <xbar.desc>Lists your last N GitHub issues & PRs (via gh GraphQL API) with status, review + CI state. Octicons (GitHub's own icon set) via an auto-detected Nerd Font Propo when installed, else SF Symbols + emoji fallback. GitHub Primer state colors, monochrome menubar. N and repo filter are configurable.</xbar.desc>
+# <xbar.desc>Your GitHub issues & PRs in 4 lists (assigned/created issues, authored/assigned PRs) via gh GraphQL API, with status, review + CI state. Octicons (GitHub's own icon set) via an auto-detected Nerd Font Propo when installed, else SF Symbols + emoji fallback. GitHub Primer state colors, monochrome menubar. N and repo filter are configurable.</xbar.desc>
 # <xbar.dependencies>gh,jq</xbar.dependencies>
 # <xbar.abouturl>https://github.com/championswimmer</xbar.abouturl>
 # <swiftbar.environment>[GH_MY_ITEMS_COUNT=10, GH_MY_ITEMS_REPOS=]</swiftbar.environment>
-# <xbar.var>number(VAR_GH_ITEMS_COUNT="10"): How many issues and PRs to list each (1-50).</xbar.var>
+# <xbar.var>number(VAR_GH_ITEMS_COUNT="10"): How many items to list in each of the 4 lists (1-50).</xbar.var>
 # <xbar.var>string(VAR_GH_ITEMS_REPOS=""): Repos to include/exclude, comma-separated: org/repo for one repo, org/* for a whole org, ! prefix to exclude. Empty = all repos. E.g. railwayapp/*,!railwayapp/mono.</xbar.var>
 # <xbar.var>select(VAR_GH_MENUBAR_STYLE="split"): Menubar icon style: split shows PR + issue counts, github shows just the GitHub icon. [split, github]</xbar.var>
 #
 # CONFIG via SwiftBar Preferences > Plugins > this plugin > Variables (SwiftBar 2.1+):
-#   VAR_GH_ITEMS_COUNT - how many issues and PRs to list each (default 10, clamped 1-50)
+#   VAR_GH_ITEMS_COUNT - how many items to list in each of the 4 lists (default 10, clamped 1-50)
 #   VAR_GH_ITEMS_REPOS - comma-separated filter list. Each entry is either:
 #                          org/repo   - include one repo, e.g. "championswimmer/tephra"
 #                          org/*      - include whole org/user, e.g. "railwayapp/*"
@@ -90,7 +90,10 @@ SF_ISSUE_SKIP="minus.circle";          NF_ISSUE_SKIP="$(printf '\xef\x91\xa8')" 
 SF_ERR="exclamationmark.triangle";     NF_ERR="$(printf '\xef\x90\xa1')"       # U+F421 alert
 SF_AUTH="person.badge.key";            NF_AUTH="$(printf '\xef\x90\x95')"       # U+F415 person
 SF_REFRESH="arrow.clockwise";          NF_REFRESH="$(printf '\xef\x91\xaa')"    # U+F46A sync
-SF_SEC_ISSUES="ticket"
+SF_INBOX="tray";                      NF_INBOX="$(printf '\xef\x92\x8d')"      # U+F48D inbox
+SF_ASSIGNED="at.circle";               NF_ASSIGNED="$(printf '\xef\x92\x86')"   # U+F486 mention (@ = assigned to me)
+SF_CREATED="square.and.pencil";        NF_CREATED="$(printf '\xef\x91\x88')"    # U+F448 pencil (written by me)
+SF_SEC_ISSUES="dot.circle"
 EMOJI_COMMENT="💬";                     NF_COMMENT="$(printf '\xef\x90\x9f')"     # U+F41F comment
 
 if [ "$HAVE_NF" -eq 1 ]; then
@@ -109,6 +112,9 @@ if [ "$HAVE_NF" -eq 1 ]; then
   T_ERR="$NF_ERR ";               S_ERR=" font=\"$NF_FONT\""
   T_AUTH="$NF_AUTH ";             S_AUTH=" font=\"$NF_FONT\""
   T_REFRESH="$NF_REFRESH ";       S_REFRESH=" font=\"$NF_FONT\""
+  T_INBOX="$NF_INBOX ";           S_INBOX=" font=\"$NF_FONT\""
+  T_ASSIGNED="$NF_ASSIGNED ";     S_ASSIGNED=" font=\"$NF_FONT\""
+  T_CREATED="$NF_CREATED ";       S_CREATED=" font=\"$NF_FONT\""
   CMT="$NF_COMMENT "
 else
   T_GH="";                 S_GH=" sfimage=$SF_GH"
@@ -126,6 +132,9 @@ else
   T_ERR="";                S_ERR=" sfimage=$SF_ERR"
   T_AUTH="";               S_AUTH=" sfimage=$SF_AUTH"
   T_REFRESH="";            S_REFRESH=" sfimage=$SF_REFRESH"
+  T_INBOX="";                  S_INBOX=" sfimage=$SF_INBOX"
+  T_ASSIGNED="";               S_ASSIGNED=" sfimage=$SF_ASSIGNED"
+  T_CREATED="";                S_CREATED=" sfimage=$SF_CREATED"
   CMT="$EMOJI_COMMENT"
 fi
 
@@ -180,8 +189,17 @@ if [ -n "$REPOS_CSV" ]; then
   fi
 fi
 
-PR_Q="author:@me is:pr sort:updated-desc${REPO_Q}"
-ISSUE_Q="author:@me is:issue sort:updated-desc${REPO_Q}"
+PR_AUTHORED_Q="is:pr author:@me state:open archived:false sort:updated-desc${REPO_Q}"
+PR_ASSIGNED_Q="is:pr assignee:@me state:open archived:false sort:updated-desc${REPO_Q}"
+ISSUE_ASSIGNED_Q="is:issue archived:false assignee:@me sort:updated-desc${REPO_Q}"
+ISSUE_CREATED_Q="is:issue archived:false author:@me sort:updated-desc${REPO_Q}"
+
+# web URLs mirroring each list (space -> +, @ -> %40; : and - are legal raw)
+q2url() { echo "$1" | sed 's/@/%40/g; s/ /+/g'; }
+PR_AUTHORED_URL="https://github.com/pulls?q=$(q2url "$PR_AUTHORED_Q")"
+PR_ASSIGNED_URL="https://github.com/pulls?q=$(q2url "$PR_ASSIGNED_Q")"
+ISSUE_ASSIGNED_URL="https://github.com/issues?q=$(q2url "$ISSUE_ASSIGNED_Q")"
+ISSUE_CREATED_URL="https://github.com/issues?q=$(q2url "$ISSUE_CREATED_Q")"
 
 # ---------- preconditions ----------
 if ! command -v gh >/dev/null 2>&1; then
@@ -206,10 +224,10 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 0
 fi
 
-# ---------- fetch: one GraphQL call for both PRs and issues ----------
-DATA="$(gh api graphql -F prQ="$PR_Q" -F issueQ="$ISSUE_Q" -F n="$N" -f query='
-query($prQ: String!, $issueQ: String!, $n: Int!) {
-  prs: search(query: $prQ, type: ISSUE, first: $n) {
+# ---------- fetch: one GraphQL call for all four lists ----------
+DATA="$(gh api graphql -F prAuthoredQ="$PR_AUTHORED_Q" -F prAssignedQ="$PR_ASSIGNED_Q" -F issueAssignedQ="$ISSUE_ASSIGNED_Q" -F issueCreatedQ="$ISSUE_CREATED_Q" -F n="$N" -f query='
+query($prAuthoredQ: String!, $prAssignedQ: String!, $issueAssignedQ: String!, $issueCreatedQ: String!, $n: Int!) {
+  prAuthored: search(query: $prAuthoredQ, type: ISSUE, first: $n) {
     nodes {
       ... on PullRequest {
         number title url isDraft state reviewDecision
@@ -220,7 +238,28 @@ query($prQ: String!, $issueQ: String!, $n: Int!) {
       }
     }
   }
-  issues: search(query: $issueQ, type: ISSUE, first: $n) {
+  prAssigned: search(query: $prAssignedQ, type: ISSUE, first: $n) {
+    nodes {
+      ... on PullRequest {
+        number title url isDraft state reviewDecision
+        repository { nameWithOwner }
+        labels(first: 5) { nodes { name } }
+        comments { totalCount }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
+  }
+  issueAssigned: search(query: $issueAssignedQ, type: ISSUE, first: $n) {
+    nodes {
+      ... on Issue {
+        number title url state stateReason
+        repository { nameWithOwner }
+        labels(first: 5) { nodes { name } }
+        comments { totalCount }
+      }
+    }
+  }
+  issueCreated: search(query: $issueCreatedQ, type: ISSUE, first: $n) {
     nodes {
       ... on Issue {
         number title url state stateReason
@@ -251,7 +290,7 @@ fi
 # open=green, merged/completed=purple, closed-red=red, draft/not-planned=gray.
 # (Menubar header stays monochrome.)
 PR_FMT='
-  .data.prs.nodes[] |
+  .data[$src].nodes[] |
   (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:70]) as $t |
   (.repository.nameWithOwner) as $r |
   (.commits.nodes[0].commit.statusCheckRollup.state // "") as $ci |
@@ -281,10 +320,10 @@ PR_FMT='
   (if $use_nf == 1 then " font=\"\($nf)\"" else (" sfimage=" + $ic.s) end) as $q |
   (if $use_nf == 1 then " font=\"\($nf)\"" else "" end) as $q2 |
   (if $use_nf == 1 then "" else (" sfcolor=" + $color) end) as $sc |
-  "--\($p)#\(.number) \($t) | href=\(.url) color=\($color)\($sc) size=12\($q)\n--  \($r) · \($cmt)\(.comments.totalCount)\($cis)\($revs) | size=11 trim=false\($q2)"
+  "----\($p)#\(.number) \($t) | href=\(.url) color=\($color)\($sc) size=12\($q)\n----  \($r) · \($cmt)\(.comments.totalCount)\($cis)\($revs) | size=11 trim=false\($q2)"
 '
 ISSUE_FMT='
-  .data.issues.nodes[] |
+  .data[$src].nodes[] |
   (.title | gsub("\n";" ") | gsub("\\|";"-") | .[0:70]) as $t |
   (.repository.nameWithOwner) as $r |
   ([.labels.nodes[].name] | join(",") | .[0:40]) as $labs |
@@ -303,20 +342,29 @@ ISSUE_FMT='
   (if $use_nf == 1 then " font=\"\($nf)\"" else (" sfimage=" + $ic.s) end) as $q |
   (if $use_nf == 1 then " font=\"\($nf)\"" else "" end) as $q2 |
   (if $use_nf == 1 then "" else (" sfcolor=" + $color) end) as $sc |
-  "--\($p)#\(.number) \($t) | href=\(.url) color=\($color)\($sc) size=12\($q)\n--  \($r) · \($cmt)\(.comments.totalCount)\($lsuf)\($st) | size=11 trim=false\($q2)"
+  "----\($p)#\(.number) \($t) | href=\(.url) color=\($color)\($sc) size=12\($q)\n----  \($r) · \($cmt)\(.comments.totalCount)\($lsuf)\($st) | size=11 trim=false\($q2)"
 '
 
-PR_LINES="$(echo "$DATA" | jq -r --argjson use_nf "$HAVE_NF" --arg nf "$NF_FONT" --arg cmt "$CMT" "$PR_FMT" 2>/dev/null)"
-ISSUE_LINES="$(echo "$DATA" | jq -r --argjson use_nf "$HAVE_NF" --arg nf "$NF_FONT" --arg cmt "$CMT" "$ISSUE_FMT" 2>/dev/null)"
+fmt_list() { # $1 = src key (prAuthored|prAssigned|issueAssigned|issueCreated), $2 = PR|ISSUE
+  local src="$1" kind="$2" fmt
+  if [ "$kind" = "PR" ]; then fmt="$PR_FMT"; else fmt="$ISSUE_FMT"; fi
+  echo "$DATA" | jq -r --argjson use_nf "$HAVE_NF" --arg nf "$NF_FONT" --arg cmt "$CMT" --arg src "$src" "$fmt" 2>/dev/null
+}
 
-PR_OPEN="$(echo "$DATA" | jq '[.data.prs.nodes[] | select(.state=="OPEN")] | length' 2>/dev/null)"
-ISSUE_OPEN="$(echo "$DATA" | jq '[.data.issues.nodes[] | select(.state=="OPEN")] | length' 2>/dev/null)"
+PR_AUTHORED_LINES="$(fmt_list prAuthored PR)"
+PR_ASSIGNED_LINES="$(fmt_list prAssigned PR)"
+ISSUE_ASSIGNED_LINES="$(fmt_list issueAssigned ISSUE)"
+ISSUE_CREATED_LINES="$(fmt_list issueCreated ISSUE)"
+
+# menubar counts: unique OPEN items across both lists of each kind
+PR_OPEN="$(echo "$DATA" | jq '[.data.prAuthored.nodes[], .data.prAssigned.nodes[]] | unique_by("\(.repository.nameWithOwner)#\(.number)") | map(select(.state=="OPEN")) | length' 2>/dev/null)"
+ISSUE_OPEN="$(echo "$DATA" | jq '[.data.issueAssigned.nodes[], .data.issueCreated.nodes[]] | unique_by("\(.repository.nameWithOwner)#\(.number)") | map(select(.state=="OPEN")) | length' 2>/dev/null)"
 PR_OPEN="${PR_OPEN:-?}"; ISSUE_OPEN="${ISSUE_OPEN:-?}"
 
 # ---------- output ----------
 # header (menu bar): monochrome. Nerd Font mode uses Octicons text glyphs;
 # SF mode uses inline :symbol: names (symbolize=true). dropdown=false keeps
-# the header out of the dropdown itself (dropdown starts at "My Pull Requests").
+# the header out of the dropdown itself (dropdown starts at "Pull Requests").
 # MENUBAR_STYLE=github shows just the GitHub mark; anything else = split PR/issue counts.
 if [ "$MENUBAR_STYLE" = "github" ]; then
   if [ "$HAVE_NF" -eq 1 ]; then
@@ -331,19 +379,37 @@ else
 fi
 echo "---"
 
-echo "${T_PR}My Pull Requests (last ${N}) |${S_PR}"
-if [ -n "$PR_LINES" ]; then
-  echo "$PR_LINES"
+echo "${T_PR}Pull Requests |${S_PR}"
+echo "--${T_CREATED}Authored |${S_CREATED}"
+if [ -n "$PR_AUTHORED_LINES" ]; then
+  echo "$PR_AUTHORED_LINES"
 else
-  echo "--(none found)"
+  echo "----(none found)"
 fi
+echo "----${T_CREATED}See all | href=${PR_AUTHORED_URL} size=11${S_CREATED}"
+echo "--${T_ASSIGNED}Assigned |${S_ASSIGNED}"
+if [ -n "$PR_ASSIGNED_LINES" ]; then
+  echo "$PR_ASSIGNED_LINES"
+else
+  echo "----(none found)"
+fi
+echo "----${T_ASSIGNED}See all | href=${PR_ASSIGNED_URL} size=11${S_ASSIGNED}"
 echo "---"
-echo "${T_SEC_ISSUES}My Issues (last ${N}) |${S_SEC_ISSUES}"
-if [ -n "$ISSUE_LINES" ]; then
-  echo "$ISSUE_LINES"
+echo "${T_SEC_ISSUES}Issues |${S_SEC_ISSUES}"
+echo "--${T_ASSIGNED}Assigned |${S_ASSIGNED}"
+if [ -n "$ISSUE_ASSIGNED_LINES" ]; then
+  echo "$ISSUE_ASSIGNED_LINES"
 else
-  echo "--(none found)"
+  echo "----(none found)"
 fi
+echo "----${T_ASSIGNED}See all | href=${ISSUE_ASSIGNED_URL} size=11${S_ASSIGNED}"
+echo "--${T_CREATED}Created |${S_CREATED}"
+if [ -n "$ISSUE_CREATED_LINES" ]; then
+  echo "$ISSUE_CREATED_LINES"
+else
+  echo "----(none found)"
+fi
+echo "----${T_CREATED}See all | href=${ISSUE_CREATED_URL} size=11${S_CREATED}"
 echo "---"
 echo "N=${N} · filter: ${FILTER_LABEL} | size=11 symbolize=false"
 if [ "$HAVE_NF" -eq 1 ]; then
@@ -362,4 +428,4 @@ else
   echo "--:${SF_MERGED}: merged | size=11 symbolize=true"
 fi
 echo "${T_REFRESH}Refresh | refresh=true size=11${S_REFRESH}"
-echo "${T_GH}Open my GitHub profile | href=https://github.com/ size=11${S_GH}"
+echo "${T_INBOX}Inbox (notifications) | href=https://github.com/notifications size=11${S_INBOX}"

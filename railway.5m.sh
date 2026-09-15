@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # <xbar.title>Railway</xbar.title>
-# <xbar.version>v2.1</xbar.version>
+# <xbar.version>v2.2</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
 # <xbar.desc>Workspace -> project -> environment -> service tree with current status on top and last N deploys below (click opens logs in the Railway dashboard). Volumes show size + fill. Uses the railway CLI (railway api GraphQL). Icons are Nerd Font Propo glyphs (Railway brand logo via Devicons, status via Octicons) when a Nerd Font is installed, else SF Symbols + emoji.</xbar.desc>
@@ -30,7 +30,9 @@
 # A proportional ("Propo") Nerd Font is auto-detected via fc-list (mdls
 # fallback); in Mono variants the icons render too small, Propo renders
 # them at full size. With no Nerd Font installed, SF Symbols are used
-# (top-level rows: sfimage only, inner rows may add emoji). To install one:
+# (top-level rows: sfimage only, inner rows may add emoji). Database services
+# show a Copy database URL row after the current status (copies the resolved
+# connection string via pbcopy). To install one:
 #   brew install --cask font-jetbrains-mono-nerd-font
 # The menu bar icon is the Railway brand glyph (nf-dev-railway, Devicons
 # set) under Nerd Fonts, else the train SF Symbol.
@@ -97,6 +99,7 @@ SF_UNKNOWN="exclamationmark.circle"; NF_UNKNOWN="$(printf '\xef\x90\xa1')" # U+F
 SF_ERR="exclamationmark.triangle";  NF_ERR="$(printf '\xef\x90\xa1')"      # U+F421 alert
 SF_AUTH="person.badge.key";         NF_AUTH="$(printf '\xef\x90\x95')"     # U+F415 person
 SF_REFRESH="arrow.clockwise";       NF_REFRESH="$(printf '\xef\x91\xaa')"  # U+F46A sync
+SF_COPY="doc.on.doc";               NF_COPY="$(printf '\xef\x83\xaa')"      # U+F0EA clipboard (Font Awesome)
 EMOJI_VOL="💾"
 EMOJI_SUCCESS="✅"; EMOJI_FAILED="❌"; EMOJI_BUILDING="🔨"; EMOJI_QUEUED="⏳"
 EMOJI_SLEEPING="💤"; EMOJI_REMOVED="➖"; EMOJI_UNKNOWN="🟣"
@@ -120,6 +123,7 @@ if [ "$HAVE_NF" -eq 1 ]; then
   T_ERR="$NF_ERR ";           S_ERR=" font=\"$NF_FONT\""
   T_AUTH="$NF_AUTH ";         S_AUTH=" font=\"$NF_FONT\""
   T_REFRESH="$NF_REFRESH ";   S_REFRESH=" font=\"$NF_FONT\""
+  T_COPY="$NF_COPY ";         S_COPY=" font=\"$NF_FONT\""
 else
   # top-level rows: sfimage only (no emoji); inner rows may add emoji
   T_RAILWAY="";               S_RAILWAY=" sfimage=$SF_RAILWAY"
@@ -140,6 +144,7 @@ else
   T_ERR="";                   S_ERR=" sfimage=$SF_ERR"
   T_AUTH="";                  S_AUTH=" sfimage=$SF_AUTH"
   T_REFRESH="";               S_REFRESH=" sfimage=$SF_REFRESH"
+  T_COPY="";                  S_COPY=" sfimage=$SF_COPY"
 fi
 
 # jq lookup maps for RENDER_FILTER: glyph prefix (g), param suffix (s),
@@ -152,7 +157,7 @@ G_JSON="$(jq -n \
   --arg SUCCESS "${NF_SUCCESS} " --arg FAILED "${NF_FAILED} " \
   --arg BUILDING "${NF_BUILDING} " --arg QUEUED "${NF_QUEUED} " \
   --arg SLEEPING "${NF_SLEEPING} " --arg REMOVED "${NF_REMOVED} " \
-  --arg UNKNOWN "${NF_UNKNOWN} " \
+  --arg UNKNOWN "${NF_UNKNOWN} " --arg COPY "${NF_COPY} " \
   '$ARGS.named')"
 S_JSON="$(jq -n \
   --arg RAILWAY " sfimage=$SF_RAILWAY" --arg ORG " sfimage=$SF_ORG" \
@@ -162,7 +167,7 @@ S_JSON="$(jq -n \
   --arg SUCCESS " sfimage=$SF_SUCCESS" --arg FAILED " sfimage=$SF_FAILED" \
   --arg BUILDING " sfimage=$SF_BUILDING" --arg QUEUED " sfimage=$SF_QUEUED" \
   --arg SLEEPING " sfimage=$SF_SLEEPING" --arg REMOVED " sfimage=$SF_REMOVED" \
-  --arg UNKNOWN " sfimage=$SF_UNKNOWN" \
+  --arg UNKNOWN " sfimage=$SF_UNKNOWN" --arg COPY " sfimage=$SF_COPY" \
   '$ARGS.named')"
 E_JSON="$(jq -n \
   --arg RAILWAY "" --arg ORG "" --arg PROJECT "" --arg ENV "" \
@@ -170,7 +175,7 @@ E_JSON="$(jq -n \
   --arg SUCCESS "$EMOJI_SUCCESS " --arg FAILED "$EMOJI_FAILED " \
   --arg BUILDING "$EMOJI_BUILDING " --arg QUEUED "$EMOJI_QUEUED " \
   --arg SLEEPING "$EMOJI_SLEEPING " --arg REMOVED "$EMOJI_REMOVED " \
-  --arg UNKNOWN "$EMOJI_UNKNOWN " \
+  --arg UNKNOWN "$EMOJI_UNKNOWN " --arg COPY "📋 " \
   '$ARGS.named')"
 
 # ---------- config ----------
@@ -259,6 +264,30 @@ if [ "${1:-}" = "select-workspace" ]; then
   exit 0
 fi
 
+# Copy-to-clipboard handler for database services. Menu rows invoke this
+# script as "<plugin>" copy-db-url <projectId> <environmentId> <serviceId>
+# via `bash=` (with refresh=false terminal=false). It resolves the service's
+# connection string through the public API `variables` query (which returns
+# RESOLVED values, e.g. the real postgres://... string, not ${{...}} refs),
+# preferring the public URL (usable from this Mac) with fallback to the
+# private one, and copies it with pbcopy.
+if [ "${1:-}" = "copy-db-url" ]; then
+  CP_PID="${2:-}"; CP_EID="${3:-}"; CP_SID="${4:-}"
+  CP_VARS="$(railway_api --variables "{\"projectId\":\"$CP_PID\",\"environmentId\":\"$CP_EID\",\"serviceId\":\"$CP_SID\"}" \
+    'query($projectId: String!, $environmentId: String!, $serviceId: String) { variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) }')" || CP_VARS=""
+  CP_URL="$(echo "$CP_VARS" | jq -r '.data.variables
+    | (.DATABASE_PUBLIC_URL // .PUBLIC_DATABASE_URL // .REDIS_PUBLIC_URL // .MYSQL_PUBLIC_URL // .MONGO_PUBLIC_URL
+       // .DATABASE_URL // .REDIS_URL // .MYSQL_URL // .MONGO_URL
+       // ([to_entries[] | select(.key | test("_URL$")) | .value | select(test("://"))] | .[0]) // empty) // empty' 2>/dev/null)"
+  if [ -n "$CP_URL" ]; then
+    printf '%s' "$CP_URL" | pbcopy
+    osascript -e 'display notification "Database URL copied to clipboard" with title "Railway"' >/dev/null 2>&1 || true
+  else
+    osascript -e 'display notification "No database URL found for this service" with title "Railway"' >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
+
 # ---------- step 1: workspaces (orgs) ----------
 ME_JSON="$(railway_api 'query { me { workspaces { id name } } }')" || \
   fail_dropdown "railway api call failed"
@@ -333,6 +362,7 @@ def st($s):
      ($svcs[] as $svc
       | $svc.serviceId as $sid
       | ($svc.serviceName | esc) as $sname
+      | ((($svc.source.image // "") + " " + ($svc.serviceName // "")) | ascii_downcase | test("postgres|postgis|timescale|pgvector|pgbouncer|cockroach|redis|valkey|keydb|mysql|mariadb|mongo|clickhouse")) as $isdb
       | "https://railway.com/project/\($pid)/service/\($sid)?environmentId=\($eid)" as $svcurl
       | ($alldeps | map(select(.environmentId == $eid and .serviceId == $sid))
           | sort_by(.createdAt) | reverse) as $sdeps
@@ -350,6 +380,9 @@ def st($s):
                then " · \($ldfull.meta.branch | tostring | esc | .[0:30])" else "" end)) as $br
            | (pfx(3) + pp($c.k) + "Current · \($lst)\($br) · \($ld.createdAt | ts) | href=\($svcurl) color=\($c.col)\(sc($c.col)) size=12" + qq($c.k))
          end),
+        (if $isdb then
+           (pfx(3) + pp("COPY") + "Copy database URL | bash=\"" + $plug + "\" param1=copy-db-url param2=\($pid) param3=\($eid) param4=\($sid) refresh=false terminal=false tooltip=\"Copy the resolved database connection URL to the clipboard\" size=11 symbolize=false" + qq("COPY"))
+         else empty end),
         (pfx(3) + "Last \($n) deploys | size=11 symbolize=false disabled=true"),
         (if ($show | length) == 0 then pfx(3) + "(no deploys yet) | size=11 symbolize=false" else empty end),
         ($show[] as $d
@@ -402,6 +435,7 @@ HYDRATE_Q='query($ids: [String!]!) {
     environments(first: 20) { edges { node { id name deletedAt
       serviceInstances(first: 50) { edges { node {
         serviceId serviceName deletedAt
+        source { image }
         latestDeployment { id status createdAt } } } }
       volumeInstances(first: 20) { edges { node {
         id volumeId sizeMB currentSizeMB state mountPath
@@ -457,7 +491,7 @@ while IFS= read -r WS; do
     NEVERC=$((NEVERC + $(echo "$HYDR" | jq '[.data.projectsByIds[] | .environments.edges[].node | select(.deletedAt == null) | .serviceInstances.edges[].node | select(.deletedAt == null and .latestDeployment == null)] | length')))
     PROJC=$((PROJC + $(echo "$HYDR" | jq '.data.projectsByIds | length')))
 
-    echo "$HYDR" | jq -r --argjson base "$BASE" --argjson n "$N" --arg nf "$NF_FONT" --argjson use_nf "$HAVE_NF" --argjson g "$G_JSON" --argjson s "$S_JSON" --argjson e "$E_JSON" \
+    echo "$HYDR" | jq -r --argjson base "$BASE" --argjson n "$N" --arg nf "$NF_FONT" --argjson use_nf "$HAVE_NF" --argjson g "$G_JSON" --argjson s "$S_JSON" --argjson e "$E_JSON" --arg plug "$PLUGIN_PATH" \
       '.data.projectsByIds[] | '"$RENDER_FILTER" >>"$TMPBODY"
   done < <(echo "$IDS_JSON" | jq -c 'range(0; length; 10) as $i | .[$i:$i+10]')
 done < <(echo "$WS_LIST_JSON" | jq -c '.[]')
