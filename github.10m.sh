@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # <xbar.title>Github</xbar.title>
-# <xbar.version>v2.2</xbar.version>
+# <xbar.version>v2.3</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
 # <xbar.desc>Your GitHub issues & PRs in 4 lists (assigned/created issues, authored/assigned PRs) via gh GraphQL API, with status, review + CI state. Octicons (GitHub's own icon set) via an auto-detected Nerd Font Propo when installed, else SF Symbols + emoji fallback. GitHub Primer state colors, monochrome menubar. N and repo filter are configurable.</xbar.desc>
@@ -91,6 +91,7 @@ SF_ERR="exclamationmark.triangle";     NF_ERR="$(printf '\xef\x90\xa1')"       #
 SF_AUTH="person.badge.key";            NF_AUTH="$(printf '\xef\x90\x95')"       # U+F415 person
 SF_REFRESH="arrow.clockwise";          NF_REFRESH="$(printf '\xef\x91\xaa')"    # U+F46A sync
 SF_INBOX="tray";                      NF_INBOX="$(printf '\xef\x92\x8d')"      # U+F48D inbox
+SF_LINKOUT="arrow.up.right.square";  NF_LINKOUT="$(printf '\xf3\xb0\x8f\x8c')" # U+F03CC md-open_in_new (square + arrow top-right)
 SF_ASSIGNED="at.circle";               NF_ASSIGNED="$(printf '\xef\x92\x86')"   # U+F486 mention (@ = assigned to me)
 SF_CREATED="square.and.pencil";        NF_CREATED="$(printf '\xef\x91\x88')"    # U+F448 pencil (written by me)
 SF_SEC_ISSUES="dot.circle"
@@ -113,6 +114,8 @@ if [ "$HAVE_NF" -eq 1 ]; then
   T_AUTH="$NF_AUTH ";             S_AUTH=" font=\"$NF_FONT\""
   T_REFRESH="$NF_REFRESH ";       S_REFRESH=" font=\"$NF_FONT\""
   T_INBOX="$NF_INBOX ";           S_INBOX=" font=\"$NF_FONT\""
+  T_SEEALL="$NF_GH ";            S_SEEALL=" font=\"$NF_FONT\""
+  T_SEEALL_R=" $NF_LINKOUT"
   T_ASSIGNED="$NF_ASSIGNED ";     S_ASSIGNED=" font=\"$NF_FONT\""
   T_CREATED="$NF_CREATED ";       S_CREATED=" font=\"$NF_FONT\""
   CMT="$NF_COMMENT "
@@ -133,6 +136,8 @@ else
   T_AUTH="";               S_AUTH=" sfimage=$SF_AUTH"
   T_REFRESH="";            S_REFRESH=" sfimage=$SF_REFRESH"
   T_INBOX="";                  S_INBOX=" sfimage=$SF_INBOX"
+  T_SEEALL=":${SF_GH}: ";         S_SEEALL=" symbolize=true"
+  T_SEEALL_R=" :${SF_LINKOUT}:"
   T_ASSIGNED="";               S_ASSIGNED=" sfimage=$SF_ASSIGNED"
   T_CREATED="";                S_CREATED=" sfimage=$SF_CREATED"
   CMT="$EMOJI_COMMENT"
@@ -386,14 +391,14 @@ if [ -n "$PR_AUTHORED_LINES" ]; then
 else
   echo "----(none found)"
 fi
-echo "----${T_CREATED}See all | href=${PR_AUTHORED_URL} size=11${S_CREATED}"
+echo "----${T_SEEALL}See all${T_SEEALL_R} | href=${PR_AUTHORED_URL} size=11${S_SEEALL}"
 echo "--${T_ASSIGNED}Assigned |${S_ASSIGNED}"
 if [ -n "$PR_ASSIGNED_LINES" ]; then
   echo "$PR_ASSIGNED_LINES"
 else
   echo "----(none found)"
 fi
-echo "----${T_ASSIGNED}See all | href=${PR_ASSIGNED_URL} size=11${S_ASSIGNED}"
+echo "----${T_SEEALL}See all${T_SEEALL_R} | href=${PR_ASSIGNED_URL} size=11${S_SEEALL}"
 echo "---"
 echo "${T_SEC_ISSUES}Issues |${S_SEC_ISSUES}"
 echo "--${T_ASSIGNED}Assigned |${S_ASSIGNED}"
@@ -402,14 +407,14 @@ if [ -n "$ISSUE_ASSIGNED_LINES" ]; then
 else
   echo "----(none found)"
 fi
-echo "----${T_ASSIGNED}See all | href=${ISSUE_ASSIGNED_URL} size=11${S_ASSIGNED}"
+echo "----${T_SEEALL}See all${T_SEEALL_R} | href=${ISSUE_ASSIGNED_URL} size=11${S_SEEALL}"
 echo "--${T_CREATED}Created |${S_CREATED}"
 if [ -n "$ISSUE_CREATED_LINES" ]; then
   echo "$ISSUE_CREATED_LINES"
 else
   echo "----(none found)"
 fi
-echo "----${T_CREATED}See all | href=${ISSUE_CREATED_URL} size=11${S_CREATED}"
+echo "----${T_SEEALL}See all${T_SEEALL_R} | href=${ISSUE_CREATED_URL} size=11${S_SEEALL}"
 echo "---"
 echo "N=${N} · filter: ${FILTER_LABEL} | size=11 symbolize=false"
 if [ "$HAVE_NF" -eq 1 ]; then

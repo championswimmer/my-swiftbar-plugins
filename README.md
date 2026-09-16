@@ -62,7 +62,7 @@ No need to edit the scripts. In SwiftBar go to Preferences → Plugins → pick 
 
 **Railway (`railway.5m.sh`)**
 
-- `VAR_RAILWAY_WORKSPACE` — pin a workspace by name or ID. Empty (or `ALL`) = all workspaces. Easiest way to set it: use the "Workspace: …" switcher inside the menu itself, it saves back here automatically.
+- `VAR_RAILWAY_WORKSPACE` — pin a workspace by name or ID. Empty (or `ALL`) = all workspaces. Easiest way to set it: pick from the workspace list at the top of the menu (tick marks the current one); it saves back here automatically.
 - `VAR_RAILWAY_DEPLOY_COUNT` — recent deploys listed per service (default `10`, clamped 1–30).
 
 Legacy `GH_MY_ITEMS_*` / `RAILWAY_*` env vars still work as a fallback if you set them via Plugin Environment, but the `VAR_*` variables above are the way to go.

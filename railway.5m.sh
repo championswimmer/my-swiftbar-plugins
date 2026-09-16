@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # <xbar.title>Railway</xbar.title>
-# <xbar.version>v2.2</xbar.version>
+# <xbar.version>v2.7</xbar.version>
 # <xbar.author>championswimmer</xbar.author>
 # <xbar.author.github>championswimmer</xbar.author.github>
-# <xbar.desc>Workspace -> project -> environment -> service tree with current status on top and last N deploys below (click opens logs in the Railway dashboard). Volumes show size + fill. Uses the railway CLI (railway api GraphQL). Icons are Nerd Font Propo glyphs (Railway brand logo via Devicons, status via Octicons) when a Nerd Font is installed, else SF Symbols + emoji.</xbar.desc>
+# <xbar.desc>Workspace -> project -> environment -> service tree with current status on top and last N deploys below (click opens logs in the Railway dashboard). Volumes attached to a service show beneath it (flat detail rows); unattached volumes stay outside. Uses the railway CLI (railway api GraphQL). Icons are Nerd Font Propo glyphs (Railway brand logo via Devicons, status via Octicons, managed Postgres/Redis/Mongo/MySQL via Devicons brand glyphs) when a Nerd Font is installed, else SF Symbols + emoji.</xbar.desc>
 # <xbar.dependencies>railway,jq</xbar.dependencies>
 # <xbar.abouturl>https://railway.com</xbar.abouturl>
 # <swiftbar.environment>[VAR_RAILWAY_WORKSPACE=, VAR_RAILWAY_DEPLOY_COUNT=10]</swiftbar.environment>
-# <xbar.var>string(VAR_RAILWAY_WORKSPACE=""): Workspace (org) to pin: name or ID. Empty (or ALL) = all workspaces; when pinned the tree starts at projects. Tip: pick from the "Workspace: ..." switcher in the menu - it saves here automatically.</xbar.var>
+# <xbar.var>string(VAR_RAILWAY_WORKSPACE=""): Workspace (org) to pin: name or ID. Empty (or ALL) = all workspaces; when pinned the tree starts at projects. Tip: pick from the workspace list at the top of the menu (tick = current) - it saves here automatically.</xbar.var>
 # <xbar.var>number(VAR_RAILWAY_DEPLOY_COUNT="10"): How many recent deploys to list per service (1-30).</xbar.var>
 #
 # CONFIG via SwiftBar Preferences > Plugins > this plugin > Variables (SwiftBar 2.1+):
@@ -16,10 +16,13 @@
 #                              projects, one level less). This is a plain
 #                              string field - the DYNAMIC picker lives in the
 #                              dropdown itself: every run fetches the user's
-#                              workspaces fresh and shows a "Workspace: ..."
-#                              switcher menu; clicking one invokes this script
-#                              via `bash=` with select-workspace <id> (plus
-#                              refresh=true), which persists the choice to the
+#                              workspaces fresh and lists them as top-level
+#                              rows (tick on the current one) - not a submenu,
+#                              because an actionless "Workspace: ..." parent
+#                              greys out after pin+refresh on SwiftBar. Clicking
+#                              a row invokes this script via `bash=` with
+#                              select-workspace <id> (plus refresh=true), which
+#                              persists the choice to the
 #                              script's .vars.json sidecar - so the menu
 #                              switcher and Preferences stay in sync.
 #                              (Legacy RAILWAY_WORKSPACE env still works as fallback.)
@@ -30,7 +33,11 @@
 # A proportional ("Propo") Nerd Font is auto-detected via fc-list (mdls
 # fallback); in Mono variants the icons render too small, Propo renders
 # them at full size. With no Nerd Font installed, SF Symbols are used
-# (top-level rows: sfimage only, inner rows may add emoji). Database services
+# (top-level rows: sfimage only, inner rows may add emoji). Managed-database
+# services (official Postgres/Redis/Mongo/MySQL templates, detected via
+# their devicons.railway.app/com icon URL) show Devicons brand glyphs in
+# Nerd Font mode; SF Symbols mode keeps the generic server icon for them.
+# Database services
 # show a Copy database URL row after the current status (copies the resolved
 # connection string via pbcopy). To install one:
 #   brew install --cask font-jetbrains-mono-nerd-font
@@ -86,6 +93,12 @@ SF_ORG="building.2";                NF_ORG="$(printf '\xef\x90\xab')"      # U+F
 SF_PROJECT="rectangle.stack";       NF_PROJECT="$(printf '\xef\x94\x82')"  # U+F502 project
 SF_ENV="globe";                     NF_ENV="$(printf '\xef\x92\x84')"      # U+F484 globe-ish
 SF_SERVICE="server.rack";           NF_SERVICE="$(printf '\xef\x91\xb3')"  # U+F473 server-ish
+# Managed-database brand glyphs (Devicons set). Only used in Nerd Font mode;
+# SF Symbols mode keeps the generic server.rack image for these (per design).
+NF_POSTGRES="$(printf '\xee\x9d\xae')"  # U+E76E dev: postgresql
+NF_REDIS="$(printf '\xee\x9d\xad')"     # U+E76D dev: redis
+NF_MONGO="$(printf '\xee\x9e\xa4')"     # U+E7A4 dev: mongodb
+NF_MYSQL="$(printf '\xee\x9c\x84')"     # U+E704 dev: mysql
 SF_VOLHDR="internaldrive";          NF_VOLHDR="$(printf '\xef\x91\xb2')"   # U+F472 database-ish
 SF_VOL="internaldrive";             NF_VOL="$(printf '\xef\x91\xb2')"      # U+F472 database-ish
 SF_NEVER="minus.circle";            NF_NEVER="$(printf '\xef\x91\xa8')"    # U+F468 dash
@@ -110,6 +123,10 @@ if [ "$HAVE_NF" -eq 1 ]; then
   T_PROJECT="$NF_PROJECT ";   S_PROJECT=" font=\"$NF_FONT\""
   T_ENV="$NF_ENV ";           S_ENV=" font=\"$NF_FONT\""
   T_SERVICE="$NF_SERVICE ";   S_SERVICE=" font=\"$NF_FONT\""
+  T_DBPG="$NF_POSTGRES ";     S_DBPG=" font=\"$NF_FONT\""
+  T_DBREDIS="$NF_REDIS ";     S_DBREDIS=" font=\"$NF_FONT\""
+  T_DBMONGO="$NF_MONGO ";     S_DBMONGO=" font=\"$NF_FONT\""
+  T_DBMYSQL="$NF_MYSQL ";     S_DBMYSQL=" font=\"$NF_FONT\""
   T_VOLHDR="$NF_VOLHDR ";     S_VOLHDR=" font=\"$NF_FONT\""
   T_VOL="$NF_VOL ";           S_VOL=" font=\"$NF_FONT\""
   T_NEVER="$NF_NEVER ";       S_NEVER=" font=\"$NF_FONT\""
@@ -131,6 +148,10 @@ else
   T_PROJECT="";               S_PROJECT=" sfimage=$SF_PROJECT"
   T_ENV="";                   S_ENV=" sfimage=$SF_ENV"
   T_SERVICE="";               S_SERVICE=" sfimage=$SF_SERVICE"
+  T_DBPG="";                  S_DBPG=" sfimage=$SF_SERVICE"
+  T_DBREDIS="";               S_DBREDIS=" sfimage=$SF_SERVICE"
+  T_DBMONGO="";               S_DBMONGO=" sfimage=$SF_SERVICE"
+  T_DBMYSQL="";               S_DBMYSQL=" sfimage=$SF_SERVICE"
   T_VOLHDR="";                S_VOLHDR=" sfimage=$SF_VOLHDR"
   T_VOL="$EMOJI_VOL ";        S_VOL=" sfimage=$SF_VOL"
   T_NEVER="";                 S_NEVER=" sfimage=$SF_NEVER"
@@ -158,6 +179,8 @@ G_JSON="$(jq -n \
   --arg BUILDING "${NF_BUILDING} " --arg QUEUED "${NF_QUEUED} " \
   --arg SLEEPING "${NF_SLEEPING} " --arg REMOVED "${NF_REMOVED} " \
   --arg UNKNOWN "${NF_UNKNOWN} " --arg COPY "${NF_COPY} " \
+  --arg DBPG "${NF_POSTGRES} " --arg DBREDIS "${NF_REDIS} " \
+  --arg DBMONGO "${NF_MONGO} " --arg DBMYSQL "${NF_MYSQL} " \
   '$ARGS.named')"
 S_JSON="$(jq -n \
   --arg RAILWAY " sfimage=$SF_RAILWAY" --arg ORG " sfimage=$SF_ORG" \
@@ -168,6 +191,8 @@ S_JSON="$(jq -n \
   --arg BUILDING " sfimage=$SF_BUILDING" --arg QUEUED " sfimage=$SF_QUEUED" \
   --arg SLEEPING " sfimage=$SF_SLEEPING" --arg REMOVED " sfimage=$SF_REMOVED" \
   --arg UNKNOWN " sfimage=$SF_UNKNOWN" --arg COPY " sfimage=$SF_COPY" \
+  --arg DBPG " sfimage=$SF_SERVICE" --arg DBREDIS " sfimage=$SF_SERVICE" \
+  --arg DBMONGO " sfimage=$SF_SERVICE" --arg DBMYSQL " sfimage=$SF_SERVICE" \
   '$ARGS.named')"
 E_JSON="$(jq -n \
   --arg RAILWAY "" --arg ORG "" --arg PROJECT "" --arg ENV "" \
@@ -176,6 +201,7 @@ E_JSON="$(jq -n \
   --arg BUILDING "$EMOJI_BUILDING " --arg QUEUED "$EMOJI_QUEUED " \
   --arg SLEEPING "$EMOJI_SLEEPING " --arg REMOVED "$EMOJI_REMOVED " \
   --arg UNKNOWN "$EMOJI_UNKNOWN " --arg COPY "📋 " \
+  --arg DBPG "" --arg DBREDIS "" --arg DBMONGO "" --arg DBMYSQL "" \
   '$ARGS.named')"
 
 # ---------- config ----------
@@ -260,6 +286,12 @@ if [ "${1:-}" = "select-workspace" ]; then
       && mv "$VARS_FILE.tmp" "$VARS_FILE"
   else
     jq -n --arg v "$WANT" '{VAR_RAILWAY_WORKSPACE: $v}' >"$VARS_FILE"
+  fi
+  # Refresh as part of this click. The menu row already has refresh=true
+  # (portable BitBar/xbar path); the URL scheme covers SwiftBar builds that
+  # skip refresh after a bash= action. open -g does not steal focus.
+  if [ -n "${SWIFTBAR:-}" ] || [ -n "${SWIFTBAR_PLUGIN_PATH:-}" ]; then
+    open -g "swiftbar://refreshplugin?name=${PLUGIN_FILE}" 2>/dev/null || true
   fi
   exit 0
 fi
@@ -357,18 +389,29 @@ def st($s):
    | ($env.name | esc) as $ename
    | "https://railway.com/project/\($pid)?environmentId=\($eid)" as $envurl
    | ($env.serviceInstances.edges | map(.node) | map(select(.deletedAt == null))) as $svcs
-   | ($env.volumeInstances.edges | map(.node)) as $vols
+   | ($env.volumeInstances.edges | map(.node) | map(select(.deletedAt == null))) as $vols
    | (pfx(1) + pp("ENV") + "\($ename) |" + qq("ENV") + " href=\($envurl)"),
      ($svcs[] as $svc
       | $svc.serviceId as $sid
       | ($svc.serviceName | esc) as $sname
-      | ((($svc.source.image // "") + " " + ($svc.serviceName // "")) | ascii_downcase | test("postgres|postgis|timescale|pgvector|pgbouncer|cockroach|redis|valkey|keydb|mysql|mariadb|mongo|clickhouse")) as $isdb
+      | ((($svc.source.image // "") + " " + ($svc.serviceName // "")) | ascii_downcase | test("postgres|postgis|timescale|pgvector|pgbouncer|cockroach|redis|valkey|keydb|mysql|mariadb|mongo|clickhouse")) as $isdbimg
+      | (($svc.service.icon // "") | ascii_downcase) as $icon
+      | (if ($icon | test("devicons\\.railway\\.(app|com)"))
+           then (if ($icon | contains("postgres")) then "DBPG"
+                 elif ($icon | contains("redis")) then "DBREDIS"
+                 elif ($icon | contains("mongo")) then "DBMONGO"
+                 elif (($icon | contains("mysql")) or ($icon | contains("mariadb"))) then "DBMYSQL"
+                 else "" end)
+           else "" end) as $dbk
+      | (if $dbk != "" then true else $isdbimg end) as $isdb
+      | (if $dbk != "" then $dbk else "SERVICE" end) as $sk
       | "https://railway.com/project/\($pid)/service/\($sid)?environmentId=\($eid)" as $svcurl
       | ($alldeps | map(select(.environmentId == $eid and .serviceId == $sid))
           | sort_by(.createdAt) | reverse) as $sdeps
       | ($sdeps[0:$n]) as $show
+      | ($vols | map(select(.serviceId == $sid))) as $svols
       | ($svc.latestDeployment) as $ld
-      | (pfx(2) + pp("SERVICE") + "\($sname) |" + qq("SERVICE") + " href=\($svcurl)"),
+      | (pfx(2) + pp($sk) + "\($sname) |" + qq($sk) + " href=\($svcurl)"),
         (if $ld == null then
            pfx(3) + pp("NEVER") + "Current · never deployed | href=\($svcurl) color=#6e7781,#8b949e size=12" + qq("NEVER")
          else
@@ -393,11 +436,35 @@ def st($s):
          | ((if $br != "" then " · \($br)" else "" end)
             + (if $msg != "" then " · \($msg)" else "" end)) as $extra
          | (pfx(3) + pp($c.k) + "\($d.status)\($extra) · \($d.createdAt | ts) | href=\($durl) color=\($c.col)\(sc($c.col)) size=12" + qq($c.k) + " emojize=false")
-        )
+        ),
+        (if ($svols | length) > 0 then pfx(3) + "---" else empty end),
+        ($svols[] as $v
+            | (($v.volume.name // "volume") | esc) as $vname
+            | ($v.sizeMB) as $size
+            | (($v.currentSizeMB // 0)) as $cur
+            | (if $size != null and $size > 0
+               then (($cur / $size * 100) | floor) else null end) as $pct
+            | (if $pct == null then {bar:"", col:"#6e7781,#8b949e"}
+               elif $pct >= 90 then {bar:(("■" * (($pct / 10) | floor)) + ("□" * (10 - (($pct / 10) | floor)))), col:"#cf222e,#f85149"}
+               elif $pct >= 75 then {bar:(("■" * (($pct / 10) | floor)) + ("□" * (10 - (($pct / 10) | floor)))), col:"#9a6700,#d29922"}
+               else {bar:(("■" * (($pct / 10) | floor)) + ("□" * (10 - (($pct / 10) | floor)))), col:"#1a7f37,#3fb950"} end) as $vc
+            | "https://railway.com/project/\($pid)/volume/\($v.volumeId)/metrics?environmentId=\($eid)" as $vurl
+            | ((if ($v.mountPath // "") != "" then $v.mountPath else "mount path unknown" end) | esc) as $vmount
+            | ((if $size != null
+                then "\($cur | floor | hum) of \($size | hum)"
+                else "usage unknown" end)) as $vuse
+            | (pfx(3) + pp("VOL") + "\($vname) · \($vuse) | href=\($vurl) size=12" + qq("VOL")),
+              (if $size != null
+                then (pfx(3) + "Fill · \($pct)% \($vc.bar) | href=\($vurl) color=\($vc.col) size=11 symbolize=false")
+                else (pfx(3) + "Usage unknown | href=\($vurl) color=#6e7781,#8b949e size=11 symbolize=false") end),
+              (pfx(3) + "Mounted at · \($vmount) | href=\($vurl) size=11 symbolize=false"),
+              (if ($v.state // "") != "" then pfx(3) + "State · \($v.state | esc) | href=\($vurl) size=11 symbolize=false" else empty end)
+           )
      ),
-     (if ($vols | length) > 0 then
-        (range(0; $vols | length) as $i
-         | $vols[$i] as $v
+     (($svcs | map(.serviceId)) as $sids
+      | ($vols | map(select(.serviceId == null or (.serviceId | IN($sids[]) | not)))) as $freevols
+      | if ($freevols | length) > 0 then
+        ($freevols[] as $v
          | (($v.volume.name // "volume") | esc) as $vname
          | ($v.sizeMB) as $size
          | (($v.currentSizeMB // 0)) as $cur
@@ -413,8 +480,7 @@ def st($s):
          | ((if $size != null
              then "\($cur | floor | hum) of \($size | hum)"
              else "usage unknown" end)) as $vuse
-         | (if $i > 0 then (pfx(2) + " ---") else empty end),
-           (pfx(2) + pp("VOL") + "\($vname) | href=\($vurl) size=12" + qq("VOL")),
+         | (pfx(2) + pp("VOL") + "\($vname) | href=\($vurl) size=12" + qq("VOL")),
            (if $size != null
              then (pfx(3) + "Used · \($vuse) | href=\($vurl) size=11 symbolize=false"),
                (pfx(3) + "Fill · \($pct)% \($vc.bar) | href=\($vurl) color=\($vc.col) size=11 symbolize=false")
@@ -436,9 +502,10 @@ HYDRATE_Q='query($ids: [String!]!) {
       serviceInstances(first: 50) { edges { node {
         serviceId serviceName deletedAt
         source { image }
+        service { icon }
         latestDeployment { id status createdAt } } } }
       volumeInstances(first: 20) { edges { node {
-        id volumeId sizeMB currentSizeMB state mountPath
+        id volumeId serviceId sizeMB currentSizeMB state mountPath deletedAt
         service { name } volume { name } } } }
     } } }
     deployments(first: 50) { edges { node {
@@ -518,17 +585,18 @@ else
 fi
 echo "${HEAD} |${HEAD_P}"
 echo "---"
-# Dynamic workspace switcher: fresh list every run. Each item invokes this
-# script via `bash=` (self-invocation, see select-workspace handler above)
-# with refresh=true terminal=false - clickable on all SwiftBar versions.
-if [ -n "$PIN" ]; then CUR_LABEL="$(echo "$PINNED_WS_NAME" | tr '\n' ' ' | tr '|' '-')"; ALL_SEL=""; else CUR_LABEL="All"; ALL_SEL=" checked=true"; fi
-echo "${T_ORG}Workspace: ${CUR_LABEL} |${S_ORG}"
-echo "--${T_ORG}All workspaces | bash=\"${PLUGIN_PATH}\" param1=select-workspace param2=ALL refresh=true terminal=false${ALL_SEL}${S_ORG}"
+# Dynamic workspace switcher: top-level rows every run (not a submenu).
+# An actionless "Workspace: ..." parent greys out after pin+refresh on
+# SwiftBar and the picker becomes unreachable. Each row is a bash= action
+# so it stays enabled; the current pin gets checked=true. Click invokes
+# this script (see select-workspace handler above) with refresh=true.
+if [ -n "$PIN" ]; then ALL_SEL=""; else ALL_SEL=" checked=true"; fi
+echo "${T_ORG}All workspaces | bash=\"${PLUGIN_PATH}\" param1=select-workspace param2=ALL refresh=true terminal=false${ALL_SEL}${S_ORG}"
 echo "$ME_JSON" | jq -r --arg pin "$PIN" --arg plug "$PLUGIN_PATH" --arg org_p "$T_ORG" --arg org_q "$S_ORG" '
   .data.me.workspaces[]
   | (.name | gsub("\n";" ") | gsub("\\|";"-")) as $safe
   | (if .id == $pin or .name == $pin then " checked=true" else "" end) as $sel
-  | "--\($org_p)\($safe) | bash=\"\($plug)\" param1=select-workspace param2=\(.id) refresh=true terminal=false\($sel)\($org_q)"'
+  | "\($org_p)\($safe) | bash=\"\($plug)\" param1=select-workspace param2=\(.id) refresh=true terminal=false\($sel)\($org_q)"'
 echo "---"
 cat "$TMPBODY"
 echo "---"
@@ -562,6 +630,10 @@ echo "--${T_QUEUED}QUEUED / WAITING | size=11${S_QUEUED} color=#9a6700,#d29922${
 echo "--${T_SLEEPING}SLEEPING | size=11${S_SLEEPING} color=#6e7781,#8b949e${SC_GRAY}"
 echo "--${T_REMOVED}REMOVED / SKIPPED | size=11${S_REMOVED} color=#6e7781,#8b949e${SC_GRAY}"
 echo "--${T_UNKNOWN}other states | size=11${S_UNKNOWN} color=#8250df,#d2a8ff${SC_PURPLE}"
+echo "--${T_DBPG}Postgres · database | size=11${S_DBPG}"
+echo "--${T_DBREDIS}Redis · database | size=11${S_DBREDIS}"
+echo "--${T_DBMONGO}MongoDB · database | size=11${S_DBMONGO}"
+echo "--${T_DBMYSQL}MySQL · database | size=11${S_DBMYSQL}"
 echo "--${T_NEVER}never deployed | size=11${S_NEVER} color=#6e7781,#8b949e${SC_GRAY}"
 echo "${T_REFRESH}Refresh | refresh=true size=11${S_REFRESH}"
 echo "${T_RAILWAY}Open Railway dashboard | href=https://railway.com/dashboard size=11${S_RAILWAY}"
